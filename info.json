@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "d003b2e102ffb0823dda3552d04bb724c5330d11",
+    "author": "Kari Norman <kari@normanfamily.org>",
+    "time": "2021-04-28 17:42:19",
+    "files": 1,
+    "merge": false,
+    "message": "Initial commit\n"
+  },
+  "remote": "https://github.com/ropensci/taxadb",
+  "pkg": "taxadb"
+}

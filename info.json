@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "7b0d07a5cf0fe8d534d0ae3205c82e064f1d667b",
+    "author": "Carl Boettiger <cboettig@gmail.com>",
+    "time": "2024-03-06 15:23:14",
+    "files": 1,
+    "merge": true,
+    "message": "Merge pull request #119 from jasonO6359/master\n\nupdate taxa_tbl, silence unnecessary warning (#118)"
+  },
+  "repo": "https://github.com/ropensci/taxadb",
+  "pkg": "taxadb"
+}

@@ -1,0 +1,13 @@
+{
+  "commit": {
+    "commit": "e933f9567417c014dab0a6166d2f4f76f8f30409",
+    "author": "Carl Boettiger <cboettig@gmail.com>",
+    "time": "2026-08-30T19:26:18Z",
+    "files": 7,
+    "merge": false,
+    "message": "Stop giving provider URLs to the CRAN URL check (#126)\n\nThe incoming check on the 0.3.0 submission reported https://www.itis.gov/\nas a 404 from inst/doc/data-sources.html. The URL is correct -- it serves\n200 from every network, user agent and method tried -- so the 404 came from\nITIS's own CDN. That does not help: a chance 404 during the incoming check\nroutes the submission to manual review and costs a round trip with the\nmaintainers, whatever the page actually serves.\n\nSo the vignette no longer names a URL for any provider. The table names\neach one, and the home page, licence and preferred citation come from\ntaxadb_provider_info() at runtime, where the check does not resolve them.\n\nThe ITIS citation is bibliographic rather than its DOI on purpose: a bare\ndoi: in a vignette *is* harvested and resolved (two already are, from the\nsame file), and doi:10.5066/F7KH0KBK redirects to www.itis.gov, so citing\nthe DOI would have inherited the same flakiness.\n\nTwo links that were genuinely dead, which the check never sees but users\ndo, are fixed in passing: itis.gov/what_itis.html was renamed (citation.html\nis the page stating CC0), and the Catalogue of Life citation pointed at\ndoi.org/10.48580/dfz8, which is gone -- COL mints a DOI per release, so any\npinned one rots.\n\nThe new url-check workflow runs urlchecker monthly against the built\npackage, so inst/doc HTML exists to check, and against the provider URLs\nheld in R strings. It tolerates the 403s that GBIF, FishBase and\nSeaLifeBase return to automated clients, and rechecks once before failing,\nsince a single hiccup is the thing being defended against rather than a\nreason to go red. It stays off the pull request path for the same reason."
+  },
+  "repo": "https://github.com/ropensci/taxadb",
+  "pkg": "taxadb",
+  "time": "2026-08-30T22:03:59Z"
+}

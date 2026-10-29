@@ -1,0 +1,332 @@
+# Name Providers and schema used in taxadb
+
+`taxadb` relies on a set of pre-assembled tables following a set of
+standardized schema layouts using Darwin Core vocabulary, as outlined
+below. The database dumps provided by providers supported in `taxadb` at
+this time are:
+
+| `taxadb` abbreviation | name                                           |
+|-----------------------|------------------------------------------------|
+| `itis`                | Integrated Taxonomic Information System (ITIS) |
+| `col`                 | Catalogue of Life                              |
+| `ncbi`                | NCBI Taxonomy                                  |
+| `gbif`                | GBIF Backbone Taxonomy                         |
+| `ott`                 | Open Tree Taxonomy                             |
+| `fb`                  | FishBase                                       |
+| `slb`                 | SeaLifeBase                                    |
+
+[`taxadb_provider_info()`](https://docs.ropensci.org/taxadb/reference/taxadb_provider_info.md)
+gives each provider’s authority, home page, licence and preferred
+citation from within R; they are kept there rather than written out here
+so that a provider moving a page does not leave a dead link in a
+vignette. Note that `fb` and `slb` are CC BY-NC and so may not be used
+commercially; the rest permit commercial use with attribution.
+
+Three providers named in earlier versions are no longer included. `tpl`
+(The Plant List) was retired by its maintainers in 2013 and superseded
+by World Flora Online (worldfloraonline.org); use `col` for plants in
+the meantime. `wd` (Wikidata) was never published. `iucn` was dropped
+because the Red List cannot be redistributed under its terms and its API
+now requires a personal token: use the rredlist package directly, and
+note that the Red List is a conservation-status source rather than a
+taxonomy.
+
+***Please Note***: `taxadb` advises against uncritically combining data
+from multiple providers. The same name is frequently used by different
+providers to mean different things – some providers consider two names
+synonyms that other providers consider distinct species. *It is crucial
+to recognize that taxonomic name providers represent independent
+taxonomic theories*, and not merely additional observations of the same
+immutable reality (Franz & Sterner 2018, *Database* 2018: bax100,
+<doi:10.1093/database/bax100>). You cannot just merge two databases of
+taxonomic names like you can two databases of, say, plant traits to get
+a bigger and more complete sample, because the former can contain
+meaningful contradictions.
+
+At the same time, it is also important to note that `col`, `gbif`,
+`ott`, are explicitly synthesis projects integrating the databases of
+names from a range of (many) other providers, while `itis`, `ncbi`,
+`fb`, and `slb` are independent name providers. The synthetic or
+integrated name lists are not simple merges, but the product of
+considerably expert opinion, and occasional nonsense automation. As
+such, they too represent novel (justified or otherwise) assertions of
+taxonomy, and are in no way a complete substitute for the databases they
+integrate, owing to both differences in how up-to-date the relative
+records are as well as to either expert disagreements or algorithmic
+miss-matches. `taxadb` makes no attempt to provide an opinion or
+reconciliation mechanism to any of these issues, but only to provide
+convenient access to data and functions for manipulating these records
+in a fast and consistent manner. (In fact, it is easy to use `taxadb` to
+verify that many of the names recognized in, say, ITIS, are not in fact
+included at all in Catalogue of Life or other databases that claim to
+derive from ITIS).
+
+These providers also distribute taxonomic data in a wide range of
+database formats using a wide range of data layouts (schemas), not all
+of which are particularly easy to use or interpret (e.g. hierarchies are
+often but not always specified in `taxon_id,parent_id` pairs.) To make
+it faster and easier to work across these providers, `taxadb` defines a
+common set of table schemas outlined below that are particularly suited
+for efficient computation of common tasks. The `taxadb` format follows a
+strict interpretation of a subset of [Darwin
+Core](http://rs.tdwg.org/dwc). `taxadb` pre-processes and publicly
+archives compressed, flat tables corresponding to each of these schema
+for each of these providers. The providers vary widely in the frequency
+at which they update their records, as well as whether they provide
+immutable versioned releases (e.g. `col`, `ott`), direct access to a
+database that is updated on a dynamic/continual basis without any log of
+the changes (`itis`, `ncbi`, others), or is simply unknown. The `taxadb`
+maintainers take semi-annual snapshots and distribute versioned releases
+of the underlying data.
+
+Most common operations can be expressed in terms of standard database
+operations, such as simple filtering joins in SQL. To implement these,
+`taxadb` publishes each table as [Parquet](https://parquet.apache.org/)
+and reads it with `duckdb`. Parquet is columnar, so a query reads only
+the columns and row groups it actually needs; this is what makes
+filtering a seven-million-row table practical, and it works the same
+whether the file is on local disk or streamed over HTTP from object
+storage. There is therefore no import step and no server to set up, and
+operations are performed out of core, since these tables are frequently
+too large to hold in memory. `taxadb` wraps a set of user-friendly R
+functions around common `SQL` queries, implemented in the popular
+`dplyr` syntax. By default, `taxadb` will always collect the results of
+these queries to return familiar, in-memory objects to the R user.
+Optional arguments allow more direct access to the database queries.
+
+### Data Schema
+
+`taxadb` relies on the Simple Darwin Core Namespace for Taxon objects,
+<http://rs.tdwg.org/dwc/terms/> \[@dwc\]. This is the mostly widely
+recognized format for exchange of taxonomic information.
+
+- `taxonID`: a unique id for the name (including provider prefix). Note
+  that some providers do not assign IDs to synonyms, but only to
+  accepted names. In this case, the `taxonID` is `NA`, and the ID of the
+  accepted name is given in `acceptedNameUsageID`. Of the current
+  providers, `itis` and `col` assign identifiers to synonyms; `ncbi`,
+  `ott`, `fb` and `slb` do not. A `taxonID` may appear on more than one
+  row – ITIS records 255 synonyms that are ambiguous between two
+  accepted taxa, and gives a row for each – but it always denotes the
+  same `scientificName`.
+- `scientificName`: a Latin name, either accepted or known synonym, at
+  the lowest resolved level for the taxon. While DWC encourages the use
+  of authorship citations, these are intentionally omitted in most
+  tables as inconsistency in abbreviations and formatting make names
+  with authors much harder to resolve. When available, this information
+  is provided in the additional optional columns using the corresponding
+  Darwin Core terms. ***Please note***: `scientificName` includes names
+  at all taxonomic rank levels, it does not mean just “genus + specific
+  epithet”. For example, “Animalia” is also a scientific name. The
+  `taxonRank` column indicates the associated taxonomic rank.  
+- `taxonRank`: the rank (as given by the provider) of this taxon.
+  **Please note**: While DarwinCore specifies seven ranks as separate
+  columns (see below), many providers recognize many more of possible
+  `taxonRank` values, such as “superclass”, “superorder.” For example,
+  NCBI (`ncbi`) and OpenTree Taxonomy (`ott`) recognize over 40
+  different ranks, many of which are unnamed, while Catalogue of Life
+  (`col`), GBIF an others recognize only the seven principle ranks.
+  Conflicting claims between naming providers about what rank a given
+  name belongs to or what species are included in which rank are
+  common.  
+- `acceptedNameUsageID` the accepted identifier. For synonyms, the
+  scientificName of the row with the corresponding `taxonID` gives the
+  accepted name, according to the data provider in question. For
+  accepted names, this is identical to the `taxonID` for the name.
+  **This column is never empty.** This is the one point where `taxadb`
+  is deliberately stricter than Darwin Core, which leaves the term
+  optional on an accepted name; most providers omit it there, reasoning
+  that an accepted name is its own accepted name. Repeating the
+  `taxonID` instead means that resolving any name to its accepted
+  identifier is a single column read with no special case, whether or
+  not the name turned out to be a synonym. It follows that a name the
+  provider redirects nowhere is its own accepted name even where the
+  provider hedges about it, so GBIF’s `doubtful` and COL’s
+  `provisionally accepted` names are self-referencing too.
+- `taxonomicStatus` Either “accepted”, for an accepted scientific name,
+  or a term indicating if the name is a known synonym, common
+  misspelling, etc. This column is never empty.
+
+Some providers may report additional optional columns, see below.
+
+### Hierarchy Terms
+
+Darwin Core defines several commonly recognized ranks as possible Taxon
+properties as well: `kingdom`, `phylum`, `class`, `order`, `family`,
+`genus`, `specificEpithet`, and `intraspecificEpithet`. Additionally,
+the taxonomic rank of any scientific name can be specified under
+`taxonRank`, whether or not it is one of these names.
+
+Semantically (specifically in the RDF sense), treating ranks as
+properties seems somewhat crude. Database providers (and thus different
+experts) disagree both about what rank levels they recognize and what
+names belong in what ranks. NCBI recognizes over 40 named ranks and
+numerous unnamed ranks. OTT, in true cladistic fashion, identifies all
+mammals as being not only in the class “Mammalia”, but also in the
+“class” of lobe-finned-fish, Sarcopterygii. To distinguish between these
+different treatments, it would be semantically most consistent to
+associate a (or multiple) `taxonRankID` with each taxonomic entry,
+rather than a a taxonRank. This ID could be specific to the data
+provider, and indicate the rank name that provider associates with that
+rank. Few (wikidata, with its strong RDF roots, is an exception)
+providers associate IDs with rank levels though.
+
+In practice, treating ranks as properties (i.e. as column headings) is
+far more consistent with typical scientific usage and convenient for
+common applications, such as generating a list of all birds or all frogs
+by a simple filter on names in a column.
+
+### Synonyms
+
+The `taxonomicStatus` value indicates if the name provided is a synonym,
+misspelling or an accepted name. `taxadb` does not enforce any
+controlled vocabulary on the use of these terms beyond using the term
+`accepted` to indicate that the `scientificName` is an accepted name
+(i.e. the `dwc:acceptedNameUsage`) for the taxon. Including both
+accepted names and synonyms in the `scientificName` column greatly
+facilitates taxonomic name resolution: a user can just perform an SQL
+filtering join from a given list of names and the taxadb table in order
+to resolve names to identifiers (`acceptedNameUsageID`s).
+
+### Common names
+
+Common names are given in a separate `common` table per provider,
+queried with
+[`filter_common()`](https://docs.ropensci.org/taxadb/reference/filter_common.md)
+or `taxa_tbl(provider, schema = "common")`. It holds one row per
+vernacular name – a taxon with forty common names across a dozen
+languages gets forty rows – with:
+
+- `vernacularName` the common name
+- `language` the language it is given in, where the provider says
+  (lowercase)
+- `taxonID`, `acceptedNameUsageID`, `scientificName`, `taxonRank`,
+  `taxonomicStatus` and the classification columns, as in the `dwc`
+  table
+
+Because a taxon recurs once per name, `taxonID` is not unique in this
+table, unlike in `dwc`.
+
+The `dwc` table also carries a `vernacularName` column, holding a single
+preferred name per taxon – English where the provider offers a choice –
+which is usually what you want when you are working with scientific
+names and would like a readable label. Use the `common` table when you
+need to search across all vernacular names, or need their languages.
+
+`ott` publishes no vernacular names, so it has no `common` table;
+[`filter_common()`](https://docs.ropensci.org/taxadb/reference/filter_common.md)
+warns for that provider.
+
+### Linked Data formats
+
+Because the columns are Darwin Core terms, these tables can be read as
+semantic data and expressed as RDF triples, allowing SPARQL queries over
+taxonomic information alongside the SQL ones. `taxadb` does not itself
+provide that interface.
+
+### Conventions
+
+- Identifiers use the integer identifier defined by the provider,
+  prefixed by the provider abbreviation in all capital letters: `ITIS:`,
+  `GBIF:`, etc.
+
+- Rank names are always lower case, as the provider gives them. They are
+  deliberately not mapped onto a single controlled list: providers
+  recognize different ranks, and disagree about which names belong to
+  which, so rewriting the ranks of one provider into the vocabulary of
+  another would assert something the provider does not.
+
+- `scientificName` never contains the authorship. Where a provider
+  supplies authorship as its own field it is stripped exactly and kept
+  in `scientificNameAuthorship`; authorship formatting varies too much
+  between providers, and within them, to match names against.
+
+- Encoding is UTF-8
+
+## Citation
+
+Cite the paper describing the package, and the naming provider whose
+data you used —
+[`taxadb_provider_info()`](https://docs.ropensci.org/taxadb/reference/taxadb_provider_info.md)
+gives each provider’s preferred citation, and each published snapshot
+repeats them in its README:
+
+> Norman KEA, Chamberlain S, Boettiger C (2020). taxadb: A
+> high-performance local taxonomic database interface. *Methods in
+> Ecology and Evolution* **11**(9), 1153-1159.
+> <doi:10.1111/2041-210X.13440>
+
+`citation("taxadb")` gives both in R.
+
+## Data Processing
+
+Pre-processing is part of the package rather than a separate pipeline.
+`td_build(provider)` fetches the provider’s own distribution, normalizes
+it to the schema above, and writes the Parquet snapshot;
+`td_validate(provider)` then checks the result against the rules above.
+Both are ordinary exported functions, so any provider can be rebuilt
+independently – to get a snapshot fresher than the published one, or
+simply to see how a table was derived.
+
+The work is done entirely in `duckdb`, and out of core, so a build is
+bounded by disk rather than memory. The providers publish their
+hierarchies as `(taxonID, parentNameUsageID)` pairs of unbounded depth;
+these are flattened into the seven rank columns by a recursive query,
+with the nearest ancestor winning where a lineage names more than one
+taxon at the same rank (routine in OTT, which places mammals in both
+Mammalia and Sarcopterygii as “class”).
+
+Provider archives are large – COL and GBIF are roughly 500MB and 1GB
+compressed – and are cached in
+[`build_dir()`](https://docs.ropensci.org/taxadb/reference/build_dir.md)
+between builds.
+
+[`td_manifest()`](https://docs.ropensci.org/taxadb/reference/td_manifest.md)
+describes a built snapshot: row counts, full column lists, SHA-256 of
+every Parquet part, and the upstream release each table was derived
+from. That last point matters, because a provider abbreviation and a
+taxadb version do not by themselves say what went in: the `gbif` table
+is built from the most recent backbone GBIF has published, which is
+dated 2023-08-28, and is therefore older than the snapshot version
+implies. The manifest and a README are published alongside the data.
+
+## Data Versioning
+
+Snapshots are regenerated periodically and published under a versioned
+prefix. Every function that reads the data takes a `version` argument,
+so an analysis can pin the snapshot it was written against, and two
+snapshots can be compared directly.
+[`available_versions()`](https://docs.ropensci.org/taxadb/reference/available_versions.md)
+lists what is published and
+[`available_providers()`](https://docs.ropensci.org/taxadb/reference/available_providers.md)
+what each version contains; both are discovered from the data
+repository, so a new release requires no package update to become
+visible.
+[`latest_version()`](https://docs.ropensci.org/taxadb/reference/latest_version.md)
+is the default.
+
+[`taxadb_repo()`](https://docs.ropensci.org/taxadb/reference/taxadb_repo.md)
+can be redirected with `options(taxadb_repo=)` to read from a mirror, or
+from your own snapshots built with
+[`td_build()`](https://docs.ropensci.org/taxadb/reference/td_build.md).
+
+#### Archival versions
+
+Older releases are republished alongside the current ones so that an
+analysis which pinned a version keeps resolving. They are
+**byte-identical to the original release and are deliberately not
+corrected**: a silently repaired snapshot would return different results
+to a script written against the real one, which is worse than leaving it
+as it was.
+
+They therefore predate the schema rules described above and generally
+violate some of them. Each archival release records which, per table, in
+the `rules_violated` column of its `manifest.csv`, and its README lists
+the known issues. `taxadb 22.12`, for example, has no `taxonID` on
+accepted NCBI names and empty `scientificName` for many higher taxa in
+`col` and `gbif`; seven of its nine tables break at least one rule.
+
+Use an archival version to reproduce an existing result, and the latest
+version for new work.
+[`available_versions()`](https://docs.ropensci.org/taxadb/reference/available_versions.md)
+lists both.
